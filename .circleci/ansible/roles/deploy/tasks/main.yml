@@ -1,45 +1,26 @@
----
-- name: "update apt packages."
-  become: yes
-  apt:
-    update_cache: yes
-
-- name: "upgrade packages"
-  become: yes
-  apt:
-    upgrade: yes
-
-
-- name: remove dependencies that are no longer required
-  become: yes
-  apt:
-    autoremove: yes
-
-- name: "install dependencies."
-  become: yes
-  apt:
-    name: ["nodejs", "npm"]
-    state: latest
-    update_cache: yes
-
-- name: "install pm2"
-  become: yes
-  npm:
-    name: pm2
-    global: yes
-    production: yes
-    state: present
-
-- name: Creates directory
+- name: Create Backend Directory
   file:
-    path: ~/web
+    path: /home/ubuntu/backend
     state: directory
 
-- name: Copy index test page
-  template:
-    src: "files/index.js"
-    dest: "~/web/index.js"
+- copy:
+    src: ~/project/.circleci/ansible/roles/deploy/artifact.tar.gz
+    dest: /home/ubuntu/backend
 
-- name: Executing node
+- name: Extract artifact.tar.gz to EC2 
+  unarchive:
+    src: artifact.tar.gz
+    dest: /home/ubuntu/backend
+
+- name: "Installing Node Dependencies"
   shell: |
-    pm2 start ~/web/index.js -f
+    cd /home/ubuntu/backend
+    npm i
+- name: Start the app
+  shell: |
+    pm2 stop default
+    pm2 start -f /home/ubuntu/backend/dist/main.js
+# - name: Enable pm2
+#   become: true
+#   shell: |
+#     sudo su -c "env PATH=$PATH:/usr/local/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu"
