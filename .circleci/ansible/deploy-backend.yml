@@ -37,4 +37,4 @@
     CORS_WHITELIST: "*"
     
   roles:
-    - deploy
+    - deploy-backend

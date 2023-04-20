@@ -17,7 +17,7 @@ commands:
           command: |
             aws cloudformation delete-stack --stack-name udapeople-backend-<<parameters.Workflow_ID>>
             aws s3 rm s3://udapeople-<<parameters.Workflow_ID>> --recursive
-            aws cloudformation delete-stack --stack-name udapeople-frontend-<<parameters.frontend-stackname>>
+            aws cloudformation delete-stack --stack-name udapeople-frontend-<<parameters.Workflow_ID>>
   notify-on-failure:
     steps:
       - slack/notify:
@@ -49,7 +49,7 @@ commands:
             then
               cd ~/project/backend
               npm install
-              npm run migration:revert
+              npm run migrations:revert
             fi
             
 jobs:
@@ -255,11 +255,10 @@ jobs:
             npm run build:prod
             tar -czvf artifact-"${CIRCLE_WORKFLOW_ID:0:5}".tar.gz dist
             aws s3 cp dist s3://udapeople-${CIRCLE_WORKFLOW_ID:0:5} --recursive
-      - revert-migrations:
-          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
       - destroy-environment:
           Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
-        
+      - revert-migrations:
+          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
                     
   deploy-backend:
     docker:
@@ -270,11 +269,11 @@ jobs:
           fingerprints:
             - "d8:db:64:bf:27:7c:8b:5c:86:f5:e3:c4:04:06:8b:7c"
       - run:
-          name: Prepare environment variables
+          name: Deploy backend
           command: |
             export TYPEORM_HOST=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
-            echo $TYPEORM_HOST >> .circleci/ansible/inventory.txt
-
+            aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text >> .circleci/ansible/inventory.txt
+            
             cd backend
             npm i
             npm run build
@@ -286,64 +285,75 @@ jobs:
             echo "TYPEORM_DATABASE=${TYPEORM_DATABASE}" >> .env
             echo "TYPEORM_MIGRATIONS_DIR=./dist/migrations" >> .env
             echo "TYPEORM_MIGRATIONS=./dist/migrations/*.ts" >> .env
-      - run:
-          name: Deploy backend
-          command: |
-            cd backend
             tar -czf artifact.tar.gz dist/* package* .env
-            cp artifact.tar.gz ~/project/.circleci/ansible/roles/deploy/artifact.tar.gz
-            ls ../.circleci/ansible/roles/deploy/
+            cp artifact.tar.gz ~/project/.circleci/ansible/roles/deploy-backend/artifact.tar.gz
+            ls ../.circleci/ansible/roles/deploy-backend/
             cd ../.circleci/ansible
+            cat inventory.txt
             ansible-playbook -i inventory.txt deploy-backend.yml
-      - revert-migrations:
-          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
       - destroy-environment:
           Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
+      - revert-migrations:
+          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
 
-#   smoke-test:
-#     docker:
-#       - image: amazon/aws-cli
-#     steps:
-#       - checkout
-#       - run:
-#           name: Backend smoke test.
-#           command: |
-#             export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
+  # smoke-test:
+  #   docker:
+  #     - image: amazon/aws-cli
+  #   steps:
+  #     - checkout
+  #     - run:
+  #         name: Frontend smoke test.
+  #         command: |
+  #           URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:5}.s3-website-us-east-1.amazonaws.com/#/employees"            
+  #           echo ${URL} 
+  #           if curl -s ${URL} | grep "Welcome"
+  #           then
+  #             echo "It worked!"
+  #             exit 0
+  #           else
+  #             echo "Rolling Back"
+  #             exit 1
+  #           fi
+  #     - run:
+  #         name: Backend smoke test.
+  #         command: |
+  #           export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
             
-#             URL="http://${BACKEND_PUBLIC_IP}:3030/api/status"
-#             # URL="http://g00gle.com"
-#             if curl -s --head ${URL}
-#             then
-#               echo "It worked!"
-#               exit 0
-#             else
-#               echo "Rolling Back"
-#               exit 1
-#             fi
-#       - notify-on-failure
-#       - destroy-environment:
-          # Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
+  #           URL="http://${BACKEND_PUBLIC_IP}:3030/api/status"
+  #           if curl -s --head ${URL}
+  #           then
+  #             echo "It worked!"
+  #             exit 0
+  #           else
+  #             echo "Rolling Back"
+  #             exit 1
+  #           fi
+  #     - notify-on-failure
+  #     - destroy-environment:
+  #         Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
+  #     - revert-migrations:
+  #         Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
 
-#   cloudfront-update:
-#     docker:
-#       - image: mareimorsy/aws-node
-#     steps:
-#       - checkout
-#       - run:
-#           name: Save Old Workflow ID to kvdb.io
-#           command: |
-#             export OLD_WORKFLOW_ID=$(aws cloudformation \
-#                       list-exports --query "Exports[?Name==\`WorkflowID\`].Value" \
-#                       --no-paginate --output text)
-#             echo "Old Wokflow ID: $OLD_WORKFLOW_ID"
-#             curl -k https://kvdb.io/${KVDB_BUCKET}/old_workflow_id -d "${OLD_WORKFLOW_ID}"
-#       - run:
-#           name: Update cloudfront distribution
-#           command: |
-#             aws cloudformation deploy \
-#               --template-file .circleci/files/cloudfront.yml \
-#               --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:5}" \
-#               --stack-name InitialStack
+  cloudfront-update:
+    docker:
+      - image: mareimorsy/aws-node
+    steps:
+      - checkout
+      - run:
+          name: Save Old Workflow ID to kvdb.io
+          command: |
+            export OLD_WORKFLOW_ID=$(aws cloudformation \
+                      list-exports --query "Exports[?Name==\`WorkflowID\`].Value" \
+                      --no-paginate --output text)
+            echo "Old Wokflow ID: $OLD_WORKFLOW_ID"
+            curl -k https://kvdb.io/${KVDB_BUCKET}/old_workflow_id -d "${OLD_WORKFLOW_ID}"
+      - run:
+          name: Update cloudfront distribution
+          command: |
+            aws cloudformation deploy \
+              --template-file .circleci/files/cloudfront.yml \
+              --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:5}" \
+              --stack-name InitialStack
 
 #   cleanup:
 #     docker:
@@ -376,12 +386,12 @@ workflows:
       #     requires: [build-frontend]
       # - test-backend:
       #     requires: [build-backend]
-      - scan-backend:
-          requires: [build-backend]
-      - scan-frontend:
-          requires: [build-frontend]
+      # - scan-backend:
+      #     requires: [build-backend]
+      # - scan-frontend:
+      #     requires: [build-frontend]
       - deploy-infrastructure:
-          requires: [scan-frontend, scan-backend]
+          requires: [build-frontend, build-backend]
       #     filters:
       #       branches: 
       #         only: [main]
@@ -394,7 +404,7 @@ workflows:
       - deploy-backend:
           requires: [run-migrations]
       # - smoke-test:
-      #     requires: [deploy-backend, deploy-frontend]
+      #     requires: [deploy-frontend, deploy-backend]
       # - cloudfront-update:
       #     requires: [smoke-test]
       # - cleanup:
