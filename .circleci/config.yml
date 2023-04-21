@@ -296,43 +296,43 @@ jobs:
       - revert-migrations:
           Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
 
-  # smoke-test:
-  #   docker:
-  #     - image: amazon/aws-cli
-  #   steps:
-  #     - checkout
-  #     - run:
-  #         name: Frontend smoke test.
-  #         command: |
-  #           URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:5}.s3-website-us-east-1.amazonaws.com/#/employees"            
-  #           echo ${URL} 
-  #           if curl -s ${URL} | grep "Welcome"
-  #           then
-  #             echo "It worked!"
-  #             exit 0
-  #           else
-  #             echo "Rolling Back"
-  #             exit 1
-  #           fi
-  #     - run:
-  #         name: Backend smoke test.
-  #         command: |
-  #           export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
+  smoke-test:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Frontend smoke test.
+          command: |
+            URL="http://udapeople-${CIRCLE_WORKFLOW_ID:0:5}.s3-website-us-east-1.amazonaws.com/#/employees"            
+            echo ${URL} 
+            if curl -s ${URL} | grep "Welcome"
+            then
+              echo "It worked!"
+              exit 0
+            else
+              echo "Rolling Back"
+              exit 1
+            fi
+      - run:
+          name: Backend smoke test.
+          command: |
+            export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
             
-  #           URL="http://${BACKEND_PUBLIC_IP}:3030/api/status"
-  #           if curl -s --head ${URL}
-  #           then
-  #             echo "It worked!"
-  #             exit 0
-  #           else
-  #             echo "Rolling Back"
-  #             exit 1
-  #           fi
-  #     - notify-on-failure
-  #     - destroy-environment:
-  #         Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
-  #     - revert-migrations:
-  #         Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
+            URL="http://${BACKEND_PUBLIC_IP}:3030/api/status"
+            if curl -s --head ${URL}
+            then
+              echo "It worked!"
+              exit 0
+            else
+              echo "Rolling Back"
+              exit 1
+            fi
+      - notify-on-failure
+      - destroy-environment:
+          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
+      - revert-migrations:
+          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
 
   cloudfront-update:
     docker:
@@ -403,8 +403,8 @@ workflows:
           requires: [deploy-infrastructure]
       - deploy-backend:
           requires: [run-migrations]
-      # - smoke-test:
-      #     requires: [deploy-frontend, deploy-backend]
+      - smoke-test:
+          requires: [deploy-frontend, deploy-backend]
       # - cloudfront-update:
       #     requires: [smoke-test]
       # - cleanup:
