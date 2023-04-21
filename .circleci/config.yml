@@ -193,7 +193,7 @@ jobs:
       - checkout
       - add_ssh_keys:
           fingerprints:
-            - "d8:db:64:bf:27:7c:8b:5c:86:f5:e3:c4:04:06:8b:7c"
+            - "c5:cf:5f:45:f6:1b:74:f5:5e:f1:36:e2:fe:ba:3a:6b"
       - attach_workspace:
           at: project/.circleci/ansible/inventory.txt
       - run:
@@ -267,7 +267,7 @@ jobs:
       - checkout
       - add_ssh_keys:
           fingerprints:
-            - "d8:db:64:bf:27:7c:8b:5c:86:f5:e3:c4:04:06:8b:7c"
+            - "c5:cf:5f:45:f6:1b:74:f5:5e:f1:36:e2:fe:ba:3a:6b"
       - run:
           name: Deploy backend
           command: |
@@ -277,7 +277,7 @@ jobs:
             cd backend
             npm i
             npm run build
-            echo "TYPEORM_ENTITIES=./dist/modules/domain/**/*.entity{.ts,.js}" > .env
+            echo "TYPEORM_ENTITIES=./dist/modules/domain/**/*.entity{.ts,.js}" >> .env
             echo "TYPEORM_HOST=${TYPEORM_HOST}" >> .env
             echo "TYPEORM_PORT=${TYPEORM_PORT}" >> .env
             echo "TYPEORM_USERNAME=${TYPEORM_USERNAME}" >> .env
@@ -287,6 +287,7 @@ jobs:
             echo "TYPEORM_MIGRATIONS=./dist/migrations/*.ts" >> .env
             tar -czf artifact.tar.gz dist/* package* .env
             cp artifact.tar.gz ~/project/.circleci/ansible/roles/deploy-backend/artifact.tar.gz
+
             ls ../.circleci/ansible/roles/deploy-backend/
             cd ../.circleci/ansible
             cat inventory.txt
@@ -318,8 +319,9 @@ jobs:
           name: Backend smoke test.
           command: |
             export BACKEND_PUBLIC_IP=$(aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text)
-            
             URL="http://${BACKEND_PUBLIC_IP}:3030/api/status"
+            echo ${URL}
+
             if curl -s --head ${URL}
             then
               echo "It worked!"
@@ -354,29 +356,32 @@ jobs:
               --template-file .circleci/files/cloudfront.yml \
               --parameter-overrides WorkflowID="${CIRCLE_WORKFLOW_ID:0:5}" \
               --stack-name InitialStack
+      - destroy-environment:
+          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
+      - revert-migrations:
+          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"
 
-#   cleanup:
-#     docker:
-#       - image: mareimorsy/aws-node
-#     steps:
-#       - checkout
-#       - run:
-#           name: Remove old stacks and files
-#           command: |
-#             export STACKS=($(aws cloudformation list-stacks \
-#                 --query "StackSummaries[*].StackName" \
-#                 --stack-status-filter CREATE_COMPLETE --no-paginate --output text)) 
-#             echo Stack names: "${STACKS[@]}"
-#             export OldWorkflowID=$(curl --insecure https://kvdb.io/${KVDB_BUCKET}/old_workflow_id)
-#             echo Old Workflow ID: $OldWorkflowID 
-#             if [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
-#             then
-#               aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
-#               aws cloudformation delete-stack --stack-name "backend-${OldWorkflowID}"
-#               aws cloudformation delete-stack --stack-name "frontend-${OldWorkflowID}"
-#             fi
+  cleanup:
+    docker:
+      - image: mareimorsy/aws-node
+    steps:
+      - checkout
+      - run:
+          name: Remove old stacks and files
+          command: |
+            export STACKS=($(aws cloudformation list-stacks \
+                --query "StackSummaries[*].StackName" \
+                --stack-status-filter CREATE_COMPLETE --no-paginate --output text)) 
+            echo Stack names: "${STACKS[@]}"
+            export OldWorkflowID=$(curl --insecure https://kvdb.io/${KVDB_BUCKET}/old_workflow_id)
+            echo Old Workflow ID: $OldWorkflowID 
+            if [[ ! -z "${OldWorkflowID}" ]] && [[ "${STACKS[@]}" =~ "${OldWorkflowID}" ]]
+            then
+              aws s3 rm "s3://udapeople-${OldWorkflowID}" --recursive
+              aws cloudformation delete-stack --stack-name "udapeople-backend-${OldWorkflowID}"
+              aws cloudformation delete-stack --stack-name "udapeople-frontend-${OldWorkflowID}"
+            fi
             
-
 workflows:
   default:
     jobs:
@@ -392,9 +397,9 @@ workflows:
       #     requires: [build-frontend]
       - deploy-infrastructure:
           requires: [build-frontend, build-backend]
-      #     filters:
-      #       branches: 
-      #         only: [main]
+          filters:
+            branches: 
+              only: [master]
       - configure-infrastructure:
           requires: [deploy-infrastructure]
       - run-migrations:
@@ -407,5 +412,5 @@ workflows:
           requires: [deploy-frontend, deploy-backend]
       - cloudfront-update:
           requires: [smoke-test]
-      # - cleanup:
-      #     requires: [cloudfront-update]
+      - cleanup:
+          requires: [cloudfront-update]
