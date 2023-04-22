@@ -56,7 +56,6 @@ jobs:
   build-frontend:
     docker:
       - image: circleci/node:13.8.0
-    # working_directory: ~/project/.circleci/ansible/inventory.txt
     steps:
       - checkout
       - restore_cache:
