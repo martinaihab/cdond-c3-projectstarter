@@ -4,6 +4,33 @@ orbs:
   slack: circleci/slack@4.10.1
 
 commands:
+  install_awscli:
+    description: Install AWS CLI v2
+    steps:
+      - run:
+          name: Install AWS CLI v2
+          command: |
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+  install_ansible:
+    description: Install Ansible
+    steps:
+      - run:
+          name: Install Ansible
+          command: |
+            sudo apt update
+            sudo apt install software-properties-common -y
+            sudo add-apt-repository --yes --update ppa:ansible/ansible
+            sudo apt install ansible -y
+  install_nodejs:
+    description: Install Node.js 13
+    steps:
+      - run:
+          name: Install Node.js 13
+          command: |
+            curl -fsSL https://deb.nodesource.com/setup_13.x | sudo -E bash -
+            sudo apt install -y nodejs
   destroy-environment:
     description: Destroy back-end and front-end cloudformation stacks given a workflow ID.
     parameters:
@@ -188,26 +215,23 @@ jobs:
 
   configure-infrastructure:
     docker:
-      - image: mareimorsy/aws-node
+      - image: cimg/base:stable
     steps:
       - checkout
+      - install_awscli
+      - install_ansible
       - add_ssh_keys:
           fingerprints:
             - "c5:cf:5f:45:f6:1b:74:f5:5e:f1:36:e2:fe:ba:3a:6b"
       - attach_workspace:
-          at: project/.circleci/ansible/inventory.txt
+          at: ~/
       - run:
-          name: Configure server
+          name: Configure Server
           command: |
-            ls
-            pwd
             cd .circleci/ansible
-            aws ec2 describe-instances --region us-east-1 --query 'Reservations[*].Instances[*].PublicIpAddress' --output text >> inventory.txt
             cat inventory.txt
             ansible-playbook -i inventory.txt configure-server.yml
-      - destroy-environment:
-          Workflow_ID: "${CIRCLE_WORKFLOW_ID:0:5}"  
-
+      - destroy-environment
   run-migrations:
     docker: 
       - image: mareimorsy/aws-node
